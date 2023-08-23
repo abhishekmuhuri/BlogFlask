@@ -1,31 +1,43 @@
+from sqlite3 import IntegrityError
 from flask import Flask, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import exc
 from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField
+from wtforms import StringField, SubmitField, EmailField, PasswordField
 from wtforms.validators import DataRequired, URL
 from flask_ckeditor import CKEditor, CKEditorField
 import datetime
 from flask import jsonify
-
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 app = Flask(__name__)
-#app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY')
+# app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY')
 app.config['SECRET_KEY'] = 'CM9n5vsfm5'
 
 # Initialise the CKEditor so that you can use it in make_post.html
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
-# CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
+# Initialize the main SQLAlchemy instance
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 db = SQLAlchemy()
 db.init_app(app)
 
 
+# Configure the 'users' database using SQLAlchemy binds
+
+
+# LOGIN MANAGER
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+
 # CONFIGURE TABLE
 class BlogPost(db.Model):
+    __bind_key__ = 'posts'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
@@ -33,6 +45,32 @@ class BlogPost(db.Model):
     body = db.Column(db.Text, nullable=False)
     author = db.Column(db.String(250), nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
+
+
+# USER TABLE
+class User(db.Model, UserMixin):
+    __bind_key__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(100), unique=True)
+    password = db.Column(db.String(100))
+    name = db.Column(db.String(100))
+
+
+# @login_manager.user_loader
+def load_user(user_id):
+    with app.app_context():
+        return db.session.query(User).get(int(user_id))
+
+
+class LoginForm(FlaskForm):
+    email = EmailField('email', validators=[DataRequired()])
+    password = PasswordField('password', [DataRequired()])
+
+
+class Registration(FlaskForm):
+    email = EmailField('email', validators=[DataRequired()])
+    password = PasswordField('password',validators=[DataRequired()])
+    name = StringField('name',validators=[DataRequired()])
 
 
 with app.app_context():
@@ -63,6 +101,7 @@ def show_post(post_id):
     return render_template("post.html", post=requested_post)
 
 
+@login_required
 @app.route("/delete/<int:post_id>")
 def delete(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
@@ -71,6 +110,7 @@ def delete(post_id):
     return redirect(url_for("get_all_posts"))
 
 
+@login_required
 @app.route("/edit-post/<int:post_id>", methods=["POST", "GET"])
 def edit_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
@@ -98,6 +138,7 @@ def edit_post(post_id):
     return render_template("make-post.html", form=edit_form, is_edit=True)
 
 
+@login_required
 # Adding a new Post
 @app.route("/new-post", methods=["GET", "POST"])
 def add_new_post():
@@ -133,6 +174,46 @@ def about():
 @app.route("/contact")
 def contact():
     return render_template("contact.html")
+
+
+@app.route('/register', methods=["POST", "GET"])
+def register():
+    register_form = Registration()
+    if current_user.is_authenticated:  # Check if the user is already logged in
+        return redirect(url_for('get_all_posts'))
+
+    if register_form.validate_on_submit():
+        new_user = User()
+        password = register_form.password.data
+        hash_and_salted_pass = generate_password_hash(password, method='pbkdf2:sha256', salt_length=8)
+        new_user.password = hash_and_salted_pass
+        new_user.name = register_form.name.data
+        new_user.email = register_form.email.data
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            flash("Registration successful. Please log in.")
+            return redirect(url_for("login"))
+        except IntegrityError as e:
+            db.session.rollback()
+            flash("IntegrityError: Data already exists or constraint violation.")
+        return render_template("register.html", form=register_form)
+
+
+@app.route('/login', methods=["POST", "GET"])
+def login():
+    if current_user.is_authenticated:  # Check if the user is already logged in
+        return redirect(url_for('get_all_posts'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and check_password_hash(user.password, form.password.data):
+            login_user(user)
+            flash("Logged in successfully.")
+            return redirect(url_for("get_all_posts"))
+        else:
+            flash("Wrong username or password!")
+    return render_template("login.html", form=form, authenticated=current_user.is_authenticated)
 
 
 if __name__ == "__main__":
