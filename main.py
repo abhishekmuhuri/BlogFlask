@@ -1,11 +1,10 @@
-from sqlite3 import IntegrityError
 from flask import Flask, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import exc
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, EmailField, PasswordField
-from wtforms.validators import DataRequired, URL
+from wtforms.validators import DataRequired, URL, Email, ValidationError
 from flask_ckeditor import CKEditor, CKEditorField
 import datetime
 from flask import jsonify
@@ -15,19 +14,20 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 app = Flask(__name__)
 # app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY')
 app.config['SECRET_KEY'] = 'CM9n5vsfm5'
+app.config['SESSION_PERMANENT'] = False
 
 # Initialise the CKEditor so that you can use it in make_post.html
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
 # Initialize the main SQLAlchemy instance
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
 db = SQLAlchemy()
+
+app.config['SQLALCHEMY_BINDS'] = {
+    'users': 'sqlite:///users.db',
+}
 db.init_app(app)
-
-
-# Configure the 'users' database using SQLAlchemy binds
-
 
 # LOGIN MANAGER
 login_manager = LoginManager()
@@ -37,7 +37,6 @@ login_manager.login_view = 'login'
 
 # CONFIGURE TABLE
 class BlogPost(db.Model):
-    __bind_key__ = 'posts'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
@@ -45,6 +44,13 @@ class BlogPost(db.Model):
     body = db.Column(db.Text, nullable=False)
     author = db.Column(db.String(250), nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
+
+
+# Custom validator function to check for characters only
+def characters_only(form, field):
+    value = field.data
+    if not value.isalpha():
+        raise ValidationError('Only characters are allowed.')
 
 
 # USER TABLE
@@ -56,21 +62,21 @@ class User(db.Model, UserMixin):
     name = db.Column(db.String(100))
 
 
-# @login_manager.user_loader
+@login_manager.user_loader
 def load_user(user_id):
-    with app.app_context():
-        return db.session.query(User).get(int(user_id))
+    return User.query.get(int(user_id))
 
 
 class LoginForm(FlaskForm):
-    email = EmailField('email', validators=[DataRequired()])
+    email = EmailField('email', validators=[DataRequired(), Email()])
     password = PasswordField('password', [DataRequired()])
 
 
 class Registration(FlaskForm):
-    email = EmailField('email', validators=[DataRequired()])
-    password = PasswordField('password',validators=[DataRequired()])
-    name = StringField('name',validators=[DataRequired()])
+    email = EmailField('email', validators=[DataRequired(), Email()])
+    password = PasswordField('password', validators=[DataRequired()])
+    name = StringField('name', validators=[DataRequired(), characters_only])
+    submit_button = SubmitField('Submit Form')
 
 
 with app.app_context():
@@ -192,12 +198,14 @@ def register():
         try:
             db.session.add(new_user)
             db.session.commit()
-            flash("Registration successful. Please log in.")
-            return redirect(url_for("login"))
-        except IntegrityError as e:
+            flash("Registration successful")
+            login_user(new_user)
+            return redirect(url_for("get_all_posts"))
+        except:
+            print("ERROR OCCURRED")
             db.session.rollback()
-            flash("IntegrityError: Data already exists or constraint violation.")
-        return render_template("register.html", form=register_form)
+            flash("User already registered with the email. Try logging in.", "danger")
+    return render_template("register.html", form=register_form)
 
 
 @app.route('/login', methods=["POST", "GET"])
@@ -213,8 +221,8 @@ def login():
             return redirect(url_for("get_all_posts"))
         else:
             flash("Wrong username or password!")
-    return render_template("login.html", form=form, authenticated=current_user.is_authenticated)
+    return render_template("login.html", form=form)
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)

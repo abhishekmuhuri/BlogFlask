@@ -91,6 +91,10 @@
   }
 }
 
+.flash-error {
+    color: red;
+}
+
 body {
   margin: 0;
   font-family: var(--bs-body-font-family);
