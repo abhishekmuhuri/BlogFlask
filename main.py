@@ -70,13 +70,14 @@ def load_user(user_id):
 class LoginForm(FlaskForm):
     email = EmailField('email', validators=[DataRequired(), Email()])
     password = PasswordField('password', [DataRequired()])
+    submit_button = SubmitField('Login')
 
 
 class Registration(FlaskForm):
     email = EmailField('email', validators=[DataRequired(), Email()])
     password = PasswordField('password', validators=[DataRequired()])
     name = StringField('name', validators=[DataRequired(), characters_only])
-    submit_button = SubmitField('Submit Form')
+    submit_button = SubmitField('Register')
 
 
 with app.app_context():
@@ -98,7 +99,10 @@ class CreatePostForm(FlaskForm):
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts)
+    if current_user.is_authenticated:
+        return render_template("index.html", all_posts=posts, user_authenticated=True)
+    else:
+        return render_template("index.html", all_posts=posts, user_authenticated=False)
 
 
 @app.route("/post/<int:post_id>")
@@ -107,8 +111,8 @@ def show_post(post_id):
     return render_template("post.html", post=requested_post)
 
 
-@login_required
 @app.route("/delete/<int:post_id>")
+@login_required
 def delete(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
     db.session.delete(requested_post)
@@ -116,8 +120,8 @@ def delete(post_id):
     return redirect(url_for("get_all_posts"))
 
 
-@login_required
 @app.route("/edit-post/<int:post_id>", methods=["POST", "GET"])
+@login_required
 def edit_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
     edit_form = CreatePostForm(
@@ -144,9 +148,10 @@ def edit_post(post_id):
     return render_template("make-post.html", form=edit_form, is_edit=True)
 
 
-@login_required
 # Adding a new Post
+
 @app.route("/new-post", methods=["GET", "POST"])
+@login_required
 def add_new_post():
     form = CreatePostForm()
     if form.validate_on_submit():
@@ -208,6 +213,14 @@ def register():
     return render_template("register.html", form=register_form)
 
 
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("Logged out successfully.")
+    return redirect(url_for("get_all_posts"))
+
+
 @app.route('/login', methods=["POST", "GET"])
 def login():
     if current_user.is_authenticated:  # Check if the user is already logged in
@@ -218,6 +231,7 @@ def login():
         if user and check_password_hash(user.password, form.password.data):
             login_user(user)
             flash("Logged in successfully.")
+            print(f"User logged in {user.name}")
             return redirect(url_for("get_all_posts"))
         else:
             flash("Wrong username or password!")
