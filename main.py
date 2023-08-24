@@ -1,7 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import exc
+from sqlalchemy import exc, ForeignKey
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, EmailField, PasswordField
 from wtforms.validators import DataRequired, URL, Email, ValidationError
@@ -36,8 +36,21 @@ login_manager.login_view = 'login'
 
 
 # CONFIGURE TABLE
+
+# USER TABLE
+class User(db.Model, UserMixin):
+    __bind_key__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(100), unique=True)
+    password = db.Column(db.String(100))
+    name = db.Column(db.String(100))
+
+
+# Blog Table
 class BlogPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, ForeignKey(User.id), nullable=False)
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
@@ -51,15 +64,6 @@ def characters_only(form, field):
     value = field.data
     if not value.isalpha():
         raise ValidationError('Only characters are allowed.')
-
-
-# USER TABLE
-class User(db.Model, UserMixin):
-    __bind_key__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
-    name = db.Column(db.String(100))
 
 
 @login_manager.user_loader
@@ -115,6 +119,7 @@ def show_post(post_id):
 @login_required
 def delete(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
+    new_post.user_id = current_user.id
     db.session.delete(requested_post)
     db.session.commit()
     return redirect(url_for("get_all_posts"))
@@ -163,6 +168,7 @@ def add_new_post():
         date = datetime.datetime.now()
         date = date.strftime("%B %d, %Y")
         new_post.date = date
+        new_post.user_id = current_user.id
         try:
             db.session.add(new_post)
             db.session.commit()
