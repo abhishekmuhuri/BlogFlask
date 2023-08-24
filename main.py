@@ -149,7 +149,6 @@ def edit_post(post_id):
 
 
 # Adding a new Post
-
 @app.route("/new-post", methods=["GET", "POST"])
 @login_required
 def add_new_post():
@@ -176,7 +175,6 @@ def add_new_post():
     return render_template("make-post.html", form=form)
 
 
-# Below is the code from previous lessons. No changes needed.
 @app.route("/about")
 def about():
     return render_template("about.html")
