@@ -1,7 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import exc, ForeignKey
+from sqlalchemy import exc, ForeignKey, Boolean
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, EmailField, PasswordField
 from wtforms.validators import DataRequired, URL, Email, ValidationError
@@ -45,6 +45,7 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(100), unique=True)
     password = db.Column(db.String(100))
     name = db.Column(db.String(100))
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
 
 
 # Blog Table
@@ -104,7 +105,7 @@ def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
     if current_user.is_authenticated:
-        return render_template("index.html", all_posts=posts, user_authenticated=True)
+        return render_template("index.html", all_posts=posts, user_authenticated=True, user=current_user)
     else:
         return render_template("index.html", all_posts=posts, user_authenticated=False)
 
@@ -112,23 +113,39 @@ def get_all_posts():
 @app.route("/post/<int:post_id>")
 def show_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
-    return render_template("post.html", post=requested_post)
+    if current_user.is_authenticated:
+        user_authenticated = True
+    else:
+        user_authenticated = False
+    return render_template("post.html", post=requested_post, user_authenticated=user_authenticated, user=current_user)
 
 
 @app.route("/delete/<int:post_id>")
 @login_required
 def delete(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
-    new_post.user_id = current_user.id
-    db.session.delete(requested_post)
-    db.session.commit()
-    return redirect(url_for("get_all_posts"))
+    # Check if current user is the owner of blog post
+    if requested_post.user_id == current_user.id or current_user.is_admin is True:
+        db.session.delete(requested_post)
+        db.session.commit()
+        return redirect(url_for("get_all_posts"))
+
+    else:
+        error_response = {
+            "error": "Not authorized to delete this post"
+        }
+        return jsonify(error_response), 401
 
 
 @app.route("/edit-post/<int:post_id>", methods=["POST", "GET"])
 @login_required
 def edit_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
+    # If user_id not equals current user_id or not admin
+    if requested_post.user_id != current_user.id and current_user.is_admin is not True:
+        error_response = {"error": "User not authorised to edit this post"}
+        return jsonify(error_response), 401
+
     edit_form = CreatePostForm(
         title=requested_post.title,
         subtitle=requested_post.subtitle,
@@ -150,7 +167,7 @@ def edit_post(post_id):
             db.session.rollback()
             return jsonify(response={"ERROR": "Same Blog already exists"}), 403
 
-    return render_template("make-post.html", form=edit_form, is_edit=True)
+    return render_template("make-post.html", form=edit_form, is_edit=True, user_authenticated=True, user=current_user)
 
 
 # Adding a new Post
@@ -178,17 +195,25 @@ def add_new_post():
             db.session.rollback()
             return jsonify(response={"ERROR": "Same Blog already exists"}), 403
 
-    return render_template("make-post.html", form=form)
+    return render_template("make-post.html", form=form, user_authenticated=True, user=current_user)
 
 
 @app.route("/about")
 def about():
-    return render_template("about.html")
+    if current_user.is_authenticated:
+        user_authenticated = True
+    else:
+        user_authenticated = False
+    return render_template("about.html", user_authenticated=user_authenticated, user=current_user)
 
 
 @app.route("/contact")
 def contact():
-    return render_template("contact.html")
+    if current_user.is_authenticated:
+        user_authenticated = True
+    else:
+        user_authenticated = False
+    return render_template("contact.html", user_authenticated=user_authenticated, user=current_user)
 
 
 @app.route('/register', methods=["POST", "GET"])
@@ -239,7 +264,7 @@ def login():
             return redirect(url_for("get_all_posts"))
         else:
             flash("Wrong username or password!")
-    return render_template("login.html", form=form)
+    return render_template("login.html", form=form, user_authenticated=False)
 
 
 if __name__ == "__main__":

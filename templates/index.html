@@ -32,7 +32,9 @@
           Posted by
           <a href="#">{{post.author}}</a>
           on {{post.date}}
+          {% if user_authenticated and user.id == post.user_id %}
            <a href="{{ url_for('delete',post_id=post.id) }}">✘</a>
+          {% endif %}
         </p>
       </div>
       <!-- Divider-->
