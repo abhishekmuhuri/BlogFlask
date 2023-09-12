@@ -1,7 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import exc, ForeignKey, Boolean
+from sqlalchemy import exc, ForeignKey
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, EmailField, PasswordField
 from wtforms.validators import DataRequired, URL, Email, ValidationError
@@ -67,6 +67,13 @@ def characters_only(form, field):
         raise ValidationError('Only characters are allowed.')
 
 
+def unique_email(form, field):
+    value = field.data
+    user = User.query.filter_by(email=value).first()
+    if user:
+        raise ValidationError('Email already registered. Try signing in')
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -79,7 +86,7 @@ class LoginForm(FlaskForm):
 
 
 class Registration(FlaskForm):
-    email = EmailField('email', validators=[DataRequired(), Email()])
+    email = EmailField('email', validators=[DataRequired(), Email(), unique_email])
     password = PasswordField('password', validators=[DataRequired()])
     name = StringField('name', validators=[DataRequired(), characters_only])
     submit_button = SubmitField('Register')
@@ -238,7 +245,7 @@ def register():
         except:
             print("ERROR OCCURRED")
             db.session.rollback()
-            flash("User already registered with the email. Try logging in.", "danger")
+            flash("ERROR OCCURRED", "danger")
     return render_template("register.html", form=register_form)
 
 
