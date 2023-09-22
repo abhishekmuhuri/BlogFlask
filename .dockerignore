@@ -1,0 +1,5 @@
+venv/
+instance/
+.gitignore
+Procfile
+README.md
