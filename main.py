@@ -10,11 +10,15 @@ import datetime
 from flask import jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from os import environ
 
 app = Flask(__name__)
-# app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY')
-app.config['SECRET_KEY'] = 'CM9n5vsfm5'
+app.config['SECRET_KEY'] = environ.get('FLASK_KEY')
+app.config['EXPOSE_PORT'] = environ.get('EXPOSE_PORT')
+# app.config['SECRET_KEY'] = 'CM9n5vsfm5'
 app.config['SESSION_PERMANENT'] = False
+
+EXPOSE_PORT = environ.get('EXPOSE_PORT')
 
 # Initialise the CKEditor so that you can use it in make_post.html
 ckeditor = CKEditor(app)
@@ -207,6 +211,7 @@ def add_new_post():
 
 @app.route("/about")
 def about():
+    print("ABOUT SELECTED")
     if current_user.is_authenticated:
         user_authenticated = True
     else:
@@ -275,4 +280,4 @@ def login():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",debug=True, port=3000)
+    app.run(host="0.0.0.0", debug=True, port=EXPOSE_PORT)

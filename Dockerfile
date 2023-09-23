@@ -10,8 +10,12 @@ COPY . /app
 # Install the required packages from requirements.txt
 RUN pip install -r requirements.txt
 
-# Expose port 3000
-EXPOSE 3000
+ARG DEFAULT_EXPOSE_PORT=3000
+
+ENV EXPOSE_PORT $DEFAULT_EXPOSE_PORT
+
+# Expose port
+EXPOSE $EXPOSE_PORT
 
 # Specify the command to run the application
 CMD ["python", "main.py"]

@@ -9,3 +9,4 @@ SQLAlchemy~=2.0.19
 werkzeug~=2.3.7
 Flask-Login==0.6.2
 email-validator
+requests~=2.31.0
